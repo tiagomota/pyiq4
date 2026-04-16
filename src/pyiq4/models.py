@@ -121,6 +121,25 @@ class ProgramDetail:
 
 
 @dataclass(frozen=True)
+class RainDelayConfig:
+    """Current rain delay and forecast delay settings for a controller.
+
+    Read from ``Satellite/GetSatellite``.
+    Written via two PATCH calls to ``Satellite/V2/UpdateBatches``.
+    """
+
+    controller_id: int
+    rain_delay_days: int  # days remaining (0 = no active delay)
+    rain_delay_long: int  # duration in .NET ticks (100ns units)
+    rain_delay_start: str | None  # UTC ISO datetime when delay started
+    programming_resumes: str | None  # local datetime when irrigation resumes
+    use_forecast: bool
+    forecast_percent_limit: int  # rain probability threshold (%)
+    forecast_inches_limit: float  # rain amount threshold (inches)
+    forecast_delay_days: int  # how many days to skip when forecast triggers
+
+
+@dataclass(frozen=True)
 class StartTime:
     id: int
     program_id: int

@@ -12,9 +12,7 @@ from pyiq4.exceptions import RainbirdAuthError, RainbirdConnectionError
 
 _FIXTURES = Path(__file__).parent / "fixtures"
 # Use a regex so the random state/nonce query params don't break URL matching.
-_LOGIN_URL_RE = re.compile(
-    r"https://iq4server\.rainbird\.com/coreidentityserver/Account/Login.*"
-)
+_LOGIN_URL_RE = re.compile(r"https://iq4server\.rainbird\.com/coreidentityserver/Account/Login.*")
 _AUTH_REDIRECT = "https://iq4.rainbird.com/auth.html#access_token=MY_JWT_TOKEN&token_type=Bearer"
 
 

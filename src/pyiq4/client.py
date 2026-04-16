@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -14,13 +15,14 @@ from .models import (
     Program,
     ProgramDetail,
     ProgramStep,
+    RainDelayConfig,
     RuntimeAssignment,
     Site,
     StartTime,
     Station,
     StationRuntime,
 )
-from .utils import parse_timespan
+from .utils import parse_timespan, timedelta_to_ticks
 
 _API_BASE = "https://iq4server.rainbird.com/coreapi/api"
 
@@ -138,6 +140,85 @@ class RainbirdIQ4Client:
             )
             for s in satellites
         ]
+
+    # ------------------------------------------------------------------
+    # Rain delay / forecast delay
+    # ------------------------------------------------------------------
+
+    async def get_rain_delay_config(self, controller_id: int) -> RainDelayConfig:
+        """Return the current rain delay and forecast delay settings for a controller."""
+        data = await self._request(
+            "GET",
+            "Satellite/GetSatellite",
+            params={"satelliteId": controller_id},
+        )
+        return RainDelayConfig(
+            controller_id=controller_id,
+            rain_delay_days=data.get("rainDelayDaysRemaining", 0),
+            rain_delay_long=data.get("rainDelayLong", 0),
+            rain_delay_start=data.get("rainDelayStart"),
+            programming_resumes=data.get("programmingResumes"),
+            use_forecast=bool(data.get("useForecast", False)),
+            forecast_percent_limit=data.get("forecastPercentLimit", 70),
+            forecast_inches_limit=data.get("forecastInchesLimit", 0.5),
+            forecast_delay_days=data.get("forecastDelayDays", 1),
+        )
+
+    async def set_rain_delay(
+        self,
+        controller_id: int,
+        delay_days: int,
+        start_time: datetime | None = None,
+    ) -> None:
+        """Set a manual rain delay on a controller.
+
+        Args:
+            controller_id: Satellite ID.
+            delay_days: Number of days to delay (0 = cancel delay, 1–14 = active delay).
+            start_time: UTC start time for the delay; defaults to now.
+        """
+        if start_time is None:
+            start_time = datetime.now(UTC)
+
+        start_str = start_time.strftime("%Y-%m-%dT%H:%M:%S+0000")
+        delay_ticks = timedelta_to_ticks(timedelta(days=delay_days))
+
+        payload = {
+            "ids": [controller_id],
+            "patch": [
+                {"op": "replace", "path": "/rainDelayLong", "value": delay_ticks},
+                {"op": "replace", "path": "/rainDelayStart", "value": start_str},
+            ],
+        }
+        await self._request("PATCH", "Satellite/V2/UpdateBatches", json=payload)
+
+    async def set_forecast_config(
+        self,
+        controller_id: int,
+        use_forecast: bool,
+        percent_limit: int = 70,
+        inches_limit: float = 0.5,
+        delay_days: int = 1,
+    ) -> None:
+        """Configure forecast-based rain delay for a controller.
+
+        Args:
+            controller_id: Satellite ID.
+            use_forecast: Enable or disable forecast-based delay.
+            percent_limit: Rain probability threshold (%) that triggers a delay.
+            inches_limit: Rain amount threshold (inches) that triggers a delay.
+            delay_days: Number of days to skip irrigation when forecast triggers.
+        """
+        payload = {
+            "ids": [controller_id],
+            "patch": [
+                {"op": "replace", "path": "/useForecast", "value": int(use_forecast)},
+                {"op": "replace", "path": "/forecastPercentLimit", "value": percent_limit},
+                {"op": "replace", "path": "/forecastInchesLimit", "value": inches_limit},
+                {"op": "replace", "path": "/forecastDelayDays", "value": delay_days},
+            ],
+        }
+        await self._request("PATCH", "Satellite/V2/UpdateBatches", json=payload)
 
     # ------------------------------------------------------------------
     # Programs
@@ -295,6 +376,18 @@ class RainbirdIQ4Client:
     async def delete_program_steps(self, step_ids: list[int]) -> None:
         """Remove stations from a program by step ID."""
         await self._request("DELETE", "ProgramStep/DeleteProgramSteps", json=step_ids)
+
+    # ------------------------------------------------------------------
+    # Manual operations
+    # ------------------------------------------------------------------
+
+    async def start_program(self, program_id: int) -> None:
+        """Start a program immediately (manual run)."""
+        await self._request("POST", "ManualOps/StartPrograms", json=[program_id])
+
+    async def stop_all_irrigation(self, controller_id: int) -> None:
+        """Stop all currently running irrigation on a controller."""
+        await self._request("POST", "Satellite/StopAllIrrigation", json=[controller_id])
 
 
 # ------------------------------------------------------------------
