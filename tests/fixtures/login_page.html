@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head><title>Rain Bird IQ4 Login</title></head>
+<body>
+<form method="post" action="/coreidentityserver/Account/Login">
+    <input type="hidden" name="__RequestVerificationToken" value="TEST_ANTIFORGERY_TOKEN_ABC123" />
+    <input type="text" name="Username" />
+    <input type="password" name="Password" />
+    <input type="hidden" name="ReturnUrl" value="/connect/authorize/callback" />
+    <button type="submit">Login</button>
+</form>
+</body>
+</html>
